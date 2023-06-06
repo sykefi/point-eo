@@ -65,6 +65,9 @@ def main(args):
         print(
             f"Target column has same name as bands. Renamed target column to {target}"
         )
+    elif args.rename_target:
+        target = args.rename_target
+        gdf = gdf.rename({args.target: target}, axis=1)
     else:
         target = args.target
 
