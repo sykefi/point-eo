@@ -1,6 +1,10 @@
 # __main__.py
 import warnings
-warnings.filterwarnings("ignore", message="Warning: optional dependency `torch` is not available. - skipping import of NN models.")
+
+warnings.filterwarnings(
+    "ignore",
+    message="Warning: optional dependency `torch` is not available. - skipping import of NN models.",
+)
 
 import argparse
 from .scripts import (
@@ -11,6 +15,7 @@ from .scripts import (
     set_band_description,
     postprocess_prediction,
 )
+
 
 def main():
     parser = argparse.ArgumentParser()

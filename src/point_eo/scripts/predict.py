@@ -2,7 +2,6 @@
 Performs inference on a geotiff, outputs a classification map and confidences
 """
 
-import argparse
 from pathlib import Path
 import subprocess
 
@@ -19,13 +18,18 @@ from dask.diagnostics import ProgressBar
 
 from rioxarray.exceptions import NoDataInBounds
 
-new_3d_xda = lambda c, d: xr.DataArray(
-    c,
-    name="classification",
-    coords={"class": np.arange(c.shape[0]), "y": d.y, "x": d.x},
-    dims=("class", "y", "x"),
-)
-new_2d_xda = lambda c, d: xr.DataArray(c, coords={"y": d.y, "x": d.x}, dims=("y", "x"))
+
+def new_3d_xda(c, d):
+    return xr.DataArray(
+        c,
+        name="classification",
+        coords={"class": np.arange(c.shape[0]), "y": d.y, "x": d.x},
+        dims=("class", "y", "x"),
+    )
+
+
+def new_2d_xda(c, d):
+    return xr.DataArray(c, coords={"y": d.y, "x": d.x}, dims=("y", "x"))
 
 
 def save_raster(x, name, crs):
@@ -33,37 +37,9 @@ def save_raster(x, name, crs):
         x.rio.to_raster(name, compress="LZW", crs=crs, tiled=True, windowed=True)
 
 
-# def process_xarray(Ax, tf):
-#     T = torch.Tensor(da.asarray(Ax).compute())
-#     T = tf(T)
-#     return T
-
-# def img2batch(sample, k):
-#     pad = k//2
-#     C,H,W = sample.shape
-
-#     unfold = torch.nn.Unfold(kernel_size=(k,k), padding=pad)
-#     UF = unfold(sample.unsqueeze(0))
-#     B = torch.stack([UF[0,:,i].reshape((C,k,k)) for i in range(UF.shape[2])])
-
-#     return B
-
-
 def batch2img(sample, shape):
     H, W = shape
     return sample.reshape(H, W, sample.shape[1]).permute(2, 0, 1)
-
-
-# def classify_block(T, model, k):
-#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-#     C,H,W = T.shape
-#     B = img2batch(T, k=k)
-#     B = B.to(device)
-
-#     with torch.no_grad():
-#         out = model(B).softmax(1)
-#     outimg = batch2img(out, (H,W))
-#     return outimg
 
 
 def full_inference_numpy(A, clf):
@@ -82,24 +58,172 @@ def full_inference_numpy(A, clf):
     return C
 
 
+def create_cell_grid(
+    Fx,
+    cell_size,
+):
+    # Make grid
+    xmin = Fx.x.min()
+    ymin = Fx.y.min()
+    xmax = Fx.x.max()
+    ymax = Fx.y.max()
+
+    # projection of the grid
+    # create the cells in a loop
+    grid_cells = []
+    for x0 in np.arange(xmin, xmax + cell_size, cell_size):
+        for y0 in np.arange(ymin, ymax + cell_size, cell_size):
+            # bounds
+            x1 = x0 - cell_size
+            y1 = y0 + cell_size
+            grid_cells.append(shapely.geometry.box(x0, y0, x1, y1))
+
+    return grid_cells
+
+
+def check_cell(Fx, cell):
+    try:
+        Ax = Fx.rio.clip([cell], from_disk=True)
+        return not da.all(Ax == da.zeros_like(Ax)).compute()
+    except NoDataInBounds:
+        return False
+    except ValueError:
+        return False
+
+
+def calculate(
+    model,
+    Fx,
+    cell_list,
+    start_index=0,
+    clip_buffer=0,
+    bit_depth=8,
+    crs="EPSG:3067",
+    out_folder="predict_output",
+    verbose=2,
+):
+    si = start_index
+    out_folder = Path(out_folder)
+    out_folder.mkdir(parents=True, exist_ok=True)
+
+    if verbose == 2 or verbose == 1:
+        ll = tqdm(cell_list)
+    else:
+        ll = cell_list
+    for i, c in enumerate(ll):
+        if i < si:  # start index
+            pass
+        else:
+            try:
+                Ax = Fx.rio.clip([c], from_disk=True)
+                if not da.all(Ax == da.zeros_like(Ax)).compute():
+                    C_arr = full_inference_numpy(np.asarray(Ax.compute()), model)
+
+                    out_C_buf = new_3d_xda(C_arr, Ax)
+                    out_C_buf = out_C_buf.rio.write_crs(crs)
+
+                    clipper = c.buffer(-clip_buffer, cap_style=3, join_style=2)
+
+                    out_C = out_C_buf.rio.clip([clipper])
+
+                    out_C = (out_C * (2**bit_depth - 1)).astype("uint16")
+
+                    out_fname = Path(out_folder) / f"C_{i:04d}.tif"
+                    save_raster(out_C, out_fname, crs=crs)
+                    if verbose == 2:
+                        print(f"SAVED {i}")
+                else:
+                    if verbose == 2:
+                        print(f"Skip empty {i}")
+
+            except NoDataInBounds:
+                if verbose == 2:
+                    print(f"NoDataInBounds in {i}")
+            except ValueError:
+                if verbose == 2:
+                    print(f"ValueError in {i}")
+
+
+def merge_folder(folder, output, crs="EPSG:3067"):
+    folder = Path(folder)
+
+    filelist = list(folder.glob("*.tif"))
+    filelist = [str(x.resolve()) + "\n" for x in filelist]
+    with open(folder / "filelist.txt", "w") as f:
+        f.writelines(filelist)
+
+    print("Writing .vrt file...")
+    subprocess.run(
+        [
+            "gdalbuildvrt",
+            "-input_file_list",
+            folder / "filelist.txt",
+            "-a_srs",
+            crs,
+            output,
+        ]
+    )
+
+
 def add_args(subparser):
     parser = subparser.add_parser("predict")
     parser.add_argument(
         "--model", type=str, required=True, help="Location of pickled model"
     )
 
-    parser.add_argument("--input_raster", type=str, required=True)
-
-    parser.add_argument("--cell_size", type=int)
-
-    parser.add_argument("--block_buffer", type=int, help="block buffer in meters")
-
-    parser.add_argument("--bit_depth", type=int, default=8)
-
-    parser.add_argument("--extent", type=str, required=False)
-    parser.add_argument("--out_folder", type=str, required=True)
     parser.add_argument(
-        "--start_index", type=int, help="Starts processing from here in case of a crash"
+        "--input_raster",
+        type=str,
+        required=True,
+        help="The input raster to be classified",
+    )
+
+    parser.add_argument(
+        "--cell_size",
+        type=int,
+        required=True,
+        help="The raster is split up to smaller blocks of cell_size X "
+        "cell_size. Use as large value as your memory permits.",
+    )
+
+    parser.add_argument(
+        "--cell_buffer",
+        type=int,
+        required=True,
+        help="Buffers each cell this much in meters",
+    )
+
+    parser.add_argument(
+        "--bit_depth",
+        type=int,
+        required=False,
+        default=8,
+        help="Output confidence raster is quantized to this range. "
+        "If bit depth is 8, values range from 0-255.",
+    )
+
+    parser.add_argument(
+        "--extent",
+        type=str,
+        required=False,
+        help="Providing an extent geometry makes processing faster as "
+        "areas outside extent are not calculated. If not provided, "
+        "calculation starts by finding empty cells.",
+    )
+    parser.add_argument(
+        "--calculate_empty",
+        action="store_true",
+        help="Passing this argument calculates all empty cells. "
+        "Useful ff extent is not provided and the raster is not rectangular",
+    )
+
+    parser.add_argument("--out_folder", type=str, required=True, help="Output folder")
+
+    parser.add_argument(
+        "--start_index",
+        type=int,
+        required=False,
+        help="Starts processing from here in case of a crash.",
     )
     parser.add_argument(
         "--crs", type=str, required=False, default="EPSG:3067", help="CRS for outputs"
@@ -129,26 +253,9 @@ def main(args):
         parallel=True,
     )
 
-    # Make grid
-    xmin = Fx.x.min()
-    ymin = Fx.y.min()
-    xmax = Fx.x.max()
-    ymax = Fx.y.max()
-
-    cell_size = args.cell_size
-    # projection of the grid
-    crs = "EPSG:3067"
-    # create the cells in a loop
-    grid_cells = []
-    for x0 in np.arange(xmin, xmax + cell_size, cell_size):
-        for y0 in np.arange(ymin, ymax + cell_size, cell_size):
-            # bounds
-            x1 = x0 - cell_size
-            y1 = y0 + cell_size
-            grid_cells.append(shapely.geometry.box(x0, y0, x1, y1))
-    cell = gpd.GeoDataFrame(grid_cells, columns=["geometry"], crs=crs)
-    cell = cell.buffer(args.block_buffer, cap_style=3, join_style=2)
-
+    grid_cells = create_cell_grid(Fx, args.cell_size)
+    cell = gpd.GeoDataFrame(grid_cells, columns=["geometry"], crs=args.crs)
+    cell = cell.buffer(args.cell_buffer, cap_style=3, join_style=2)
     cell.to_file(out_final / "cell_grid.geojson")
 
     # set start index
@@ -161,23 +268,14 @@ def main(args):
     if args.extent:
         extent = gpd.read_file(args.extent)
         calc_cells = cell.geometry.apply(lambda x: extent.intersects(x).any()).values
-    else:
-        # otherwise find empty cells in parallel
+    elif args.calculate_empty:
+        # otherwise find empty cells in parallel if calculate_empty is assigned
         try:
             # If the empty cells have been calculated they are cached
             calc_cells = np.load(out_folder / "empty_index.npy")
             print("found existing cell index")
         except FileNotFoundError:
             list_of_delayed_functions = []
-
-            def check_cell(Fx, cell):
-                try:
-                    Ax = Fx.rio.clip([cell], from_disk=True)
-                    return not da.all(Ax == da.zeros_like(Ax)).compute()
-                except NoDataInBounds:
-                    return False
-                except ValueError:
-                    return False
 
             print("Checking empty cells...")
             for i, c in enumerate(cell):
@@ -188,52 +286,26 @@ def main(args):
 
             calc_cells = [x for x in calc_cells]
             np.save(out_folder / "empty_index.npy", calc_cells)
+    else:
+        calc_cells = np.full(len(grid_cells), True)
 
-    for i, c in enumerate(tqdm(cell.iloc[calc_cells])):
-        if i < si:  # start index
-            pass
-        else:
-            try:
-                Ax = Fx.rio.clip([c], from_disk=True)
-                if not da.all(Ax == da.zeros_like(Ax)).compute():
-                    C_arr = full_inference_numpy(np.asarray(Ax.compute()), model)
-
-                    out_C_buf = new_3d_xda(C_arr, Ax)
-                    out_C_buf = out_C_buf.rio.write_crs(args.crs)
-
-                    clipper = c.buffer(-args.block_buffer, cap_style=3, join_style=2)
-
-                    out_C = out_C_buf.rio.clip([clipper])
-
-                    out_C = (out_C * (2**args.bit_depth - 1)).astype("uint16")
-
-                    out_fname = Path(out_folder) / f"C_{i:04d}.tif"
-                    save_raster(out_C, out_fname, crs=args.crs)
-                    print(f"SAVED {i}")
-                else:
-                    print(f"Skip empty {i}")
-
-            except NoDataInBounds:
-                print(f"Error in {i}")
-            except ValueError:
-                print(f"Error in {i}")
+    # Actual calculation and saving of cells
+    calculate(
+        model=model,
+        Fx=Fx,
+        cell_list=cell.iloc[calc_cells],
+        start_index=si,
+        clip_buffer=args.cell_buffer,
+        bit_depth=args.bit_depth,
+        crs=args.crs,
+        out_folder=out_folder,
+    )
 
     # Merge to a vrt file
-    filelist = list(out_folder.glob("*.tif"))
-    filelist = [str(x.resolve()) + "\n" for x in filelist]
-    with open(out_folder / "filelist.txt", "w") as f:
-        f.writelines(filelist)
-
-    print("Writing .vrt file...")
-    subprocess.run(
-        [
-            "gdalbuildvrt",
-            "-input_file_list",
-            out_folder / "filelist.txt",
-            "-a_srs",
-            args.crs,
-            out_final / f"{input_file.stem}__{model_file.stem}_C.vrt",
-        ]
+    merge_folder(
+        out_folder,
+        crs=args.crs,
+        output=out_final / f"{input_file.stem}__{model_file.stem}_C.vrt",
     )
 
 
