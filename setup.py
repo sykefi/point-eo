@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='point_eo',
-    version='0.0.1',
+    version='0.0.2',
     packages=find_packages(include=['point_eo']),
     package_dir={'':'src'},
     entry_points={

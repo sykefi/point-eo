@@ -8,7 +8,7 @@ dependencies:
   # DL
 
   # Geo
-  - rasterio
+  - rasterio=1.2.10
   - geopandas
   - imgaug
   - xarray

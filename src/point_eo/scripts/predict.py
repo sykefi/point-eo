@@ -13,8 +13,7 @@ import xarray as xr
 import geopandas as gpd
 from tqdm import tqdm
 import dask.array as da
-import dask
-from dask.diagnostics import ProgressBar
+from joblib import Parallel, delayed
 
 from rioxarray.exceptions import NoDataInBounds
 
@@ -80,6 +79,14 @@ def create_cell_grid(
 
     return grid_cells
 
+def clip_arr(C_arr, c, Ax, clip_buffer, crs):
+    out_C_buf = new_3d_xda(C_arr, Ax)
+    out_C_buf = out_C_buf.rio.write_crs(crs)
+
+    clipper = c.buffer(-clip_buffer, cap_style=3, join_style=2)
+
+    return out_C_buf.rio.clip([clipper])
+
 
 def check_cell(Fx, cell):
     try:
@@ -89,6 +96,9 @@ def check_cell(Fx, cell):
         return False
     except ValueError:
         return False
+    except np.core._exceptions._ArrayMemoryError:
+        print("ArrayMemoryError. Setting cell as True")
+        return True
 
 
 def calculate(
@@ -119,12 +129,14 @@ def calculate(
                 if not da.all(Ax == da.zeros_like(Ax)).compute():
                     C_arr = full_inference_numpy(np.asarray(Ax.compute()), model)
 
-                    out_C_buf = new_3d_xda(C_arr, Ax)
-                    out_C_buf = out_C_buf.rio.write_crs(crs)
-
-                    clipper = c.buffer(-clip_buffer, cap_style=3, join_style=2)
-
-                    out_C = out_C_buf.rio.clip([clipper])
+                    try:
+                        out_C = clip_arr(C_arr, c, Ax, clip_buffer, crs)
+                    except FileNotFoundError: 
+                        raise Exception("Running out of file handles. You can try continuing the run " \
+                            f"by restarting the script with the parameter --start_index {i-1}." \
+                             "However, it is recommended to make --cell_size larger, deleting the patch folder " 
+                             "and restarting the script."
+                        )
 
                     out_C = (out_C * (2**bit_depth - 1)).astype("uint16")
 
@@ -188,6 +200,7 @@ def add_args(subparser):
 
     parser.add_argument(
         "--cell_buffer",
+        "--block_buffer",
         type=int,
         required=True,
         help="Buffers each cell this much in meters",
@@ -229,6 +242,10 @@ def add_args(subparser):
         "--crs", type=str, required=False, default="EPSG:3067", help="CRS for outputs"
     )
 
+    parser.add_argument(
+        "--verbose", type=int, default=1, help="Set to 2 if you want everything to be printed. Default 1"
+    )
+
 
 def main(args):
     input_file = Path(args.input_raster)
@@ -258,6 +275,12 @@ def main(args):
     cell = cell.buffer(args.cell_buffer, cap_style=3, join_style=2)
     cell.to_file(out_final / "cell_grid.geojson")
 
+    # Print cell size
+    Ax_first = Fx.rio.clip([cell[len(cell)//2]], from_disk=True)
+    print(f"Cell size in pixels is: {Ax_first.shape}" \
+          f"\nCell size in MB is: {Ax_first.nbytes / (1024*1024):.4f}" \
+           "\nAdjust cell_size if a larger array fits to memory")
+
     # set start index
     if not args.start_index:
         si = -1
@@ -278,11 +301,7 @@ def main(args):
             list_of_delayed_functions = []
 
             print("Checking empty cells...")
-            for i, c in enumerate(cell):
-                list_of_delayed_functions.append(dask.delayed(check_cell)(Fx, c))
-
-            with ProgressBar():
-                calc_cells = dask.compute(*list_of_delayed_functions)
+            calc_cells = Parallel(n_jobs=-1)(delayed(check_cell)(Fx, c) for c in tqdm(cell))
 
             calc_cells = [x for x in calc_cells]
             np.save(out_folder / "empty_index.npy", calc_cells)
@@ -299,6 +318,7 @@ def main(args):
         bit_depth=args.bit_depth,
         crs=args.crs,
         out_folder=out_folder,
+        verbose=args.verbose
     )
 
     # Merge to a vrt file
