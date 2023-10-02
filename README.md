@@ -9,6 +9,9 @@ Features:
 - Model performance metrics
 - Prediction on large rasters
 
+See the [demo](docs/demo.md) for more details on features and a guide on running point-eo on the command line.
+See the [demo notebook](docs/demo_notebook.ipynb) for a demo of the Python API.
+
 ## Installation
 
 ```cmd
@@ -19,6 +22,11 @@ cd point-eo
 Install [miniconda](https://docs.conda.io/en/latest/miniconda.html) and [Mamba](https://mamba.readthedocs.io/en/latest/installation.html) first. Then create the environment:
 ```cmd
 mamba env create -f environment.yaml
+```
+
+Activate the environment
+```
+conda activate point-eo
 ```
 
 and install the package
