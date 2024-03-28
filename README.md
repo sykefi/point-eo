@@ -12,6 +12,10 @@ Features:
 See the [demo](docs/demo.md) for more details on features and a guide on running point-eo on the command line.
 See the [demo notebook](docs/demo_notebook.ipynb) for a demo of the Python API.
 
+## Overview
+
+![Overview](docs/images/point-eo-overview.png)
+
 ## Installation
 
 ```cmd
