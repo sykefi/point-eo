@@ -129,7 +129,7 @@ Classifying the entire raster is done with the `predict` command
 
 ```cmd
 point-eo predict ^
-    --model test_project\\analysis\\demo_rf__s2_2018_lataseno__points_clc__corine__2023-10-02T14-57-21_model.pkl ^
+    --model test_project\\analysis\\demo_rf__s2_2018_lataseno__points_clc__corine__2023-10-13T10-51-44_model.pkl ^
     --input_raster data\\s2_2018_lataseno.tif ^
     --cell_size 3000 ^
     --cell_buffer 2 ^
@@ -137,6 +137,16 @@ point-eo predict ^
 ```
 
 If your raster is not rectangular, it is adviced to pass a geometry file to the `--extent` parameter. This way the only areas in the geometry are calculated, saving time.
+
+```cmd
+point-eo predict ^
+    --model test_project\\analysis\\demo_rf__s2_2018_lataseno__points_clc__corine__2023-10-13T10-51-44_model.pkl ^
+    --input_raster data\\s2_2018_lataseno.tif ^
+    --cell_size 3000 ^
+    --cell_buffer 2 ^
+    --out_folder test_project\\predictions_extent ^
+    --extent data\\demo_extent.shp
+```
 
 See `point-eo predict --help` for all parameters.
 

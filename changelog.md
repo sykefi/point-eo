@@ -1,3 +1,10 @@
+## 0.1.dev
+
+- Fixed a unnecessary null raster check in `postprocess_prediction.py`
+- `predict` checks now the bounds of the `--extent` file and calculates the cell grid based on this. Allows for large rasters to be processed with smaller extents.
+- Calculated cells are split to lists of 1000, which should fix the `FileNotFoundError: [WinError 206] The filename or extension is too long` - error.
+- Demo extent file and command.
+
 ## 0.0.2:
 
 - Fixed error handling for `FileNotFoundError: [WinError 206] The filename or extension is too long: 'E:\\anaconda\\anaconda3\\envs\\point-eo'`. This is caused most likely by file handles running out when the cell size is small and there are a lot of cells to process.
