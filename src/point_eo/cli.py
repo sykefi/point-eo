@@ -1,4 +1,3 @@
-# __main__.py
 import warnings
 
 warnings.filterwarnings(
@@ -7,18 +6,11 @@ warnings.filterwarnings(
 )
 
 import argparse
-from .scripts import (
-    sample_raster,
-    analysis,
-    tpot_train,
-    predict,
-    set_band_description,
-    postprocess_prediction,
-)
+from point_eo.scripts import sample_raster, analysis, tpot_train, predict, set_band_description, postprocess_prediction
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(prog="point-eo")
     subparsers = parser.add_subparsers(title="Available commands", dest="script")
 
     sample_raster.add_args(subparsers)
@@ -42,7 +34,3 @@ def main():
         set_band_description.main(args)
     elif args.script == "postprocess_prediction":
         postprocess_prediction.main(args)
-
-
-if __name__ == "__main__":
-    main()
