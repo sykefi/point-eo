@@ -1,3 +1,4 @@
+import pytest
 import argparse
 from point_eo.scripts import sample_raster, analysis, tpot_train, predict, set_band_description, postprocess_prediction
 
@@ -73,7 +74,7 @@ def test_tpot_analysis():
     args = parser.parse_args(test_args)
     analysis.main(args)
 
-def test_predict():
+def test_predict_rf():
     test_args = ["predict",
                  "--model", "tests/data/models/demo_rf__s2_2018_lataseno__points_clc__corine__2024-12-09T17-04-59_model.pkl",
                  "--input_raster", "data/s2_2018_lataseno.tif",
@@ -84,6 +85,37 @@ def test_predict():
     parser = get_parser()
     args = parser.parse_args(test_args)
     predict.main(args)
+
+def test_predict_tpot_normal():
+    test_args = ["predict",
+                "--model", "tests/data/models/tpot_demo__s2_2018_lataseno__points_clc__corine__2024-12-12T10-17-34_model.pkl",
+                "--input_raster", "data/s2_2018_lataseno.tif",
+                "--cell_size", "3000",
+                "--cell_buffer", "2",
+                "--out_folder", "test_project/predictions_tpot"
+    ]
+    parser = get_parser()
+    args = parser.parse_args(test_args)
+    predict.main(args)
+
+def test_predict_tpot_try_overwrite():
+    from pathlib import Path
+    dir = Path("test_project/predictions_overwrite/s2_2018_lataseno_patches")
+    dir.mkdir(parents=True, exist_ok=True)
+    Path(dir, "demo.tif").touch()
+    with pytest.raises(SystemExit) as e:
+        test_args = ["predict",
+                    "--model", "tests/data/models/tpot_demo__s2_2018_lataseno__points_clc__corine__2024-12-12T10-17-34_model.pkl",
+                    "--input_raster", "data/s2_2018_lataseno.tif",
+                    "--cell_size", "3000",
+                    "--cell_buffer", "2",
+                    "--out_folder", "test_project/predictions_overwrite"
+        ]
+        parser = get_parser()
+        args = parser.parse_args(test_args)
+        predict.main(args)
+    assert e.type == SystemExit
+    assert e.value.code == 1
 
 def test_set_band_description():
     test_args = ["set_band_description",

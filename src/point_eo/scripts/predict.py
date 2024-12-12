@@ -257,7 +257,11 @@ def main(args):
     input_file = Path(args.input_raster)
     model_file = Path(args.model)
     out_folder = Path(args.out_folder) / f"{input_file.stem}_patches"
-    out_folder.mkdir(exist_ok=True, parents=True)
+    try:
+        out_folder.mkdir(exist_ok=False, parents=True)
+    except FileExistsError:
+        print(f"Output folder '{out_folder}' already exists. Change the folder name to prevent overwrigin. Exiting.")
+        exit(1)
     out_final = Path(args.out_folder)
 
     # Model
