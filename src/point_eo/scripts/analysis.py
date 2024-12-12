@@ -297,6 +297,10 @@ def add_args(subparser):
     parser.add_argument(
         "--confusion_matrix_fonts", type=str, required=False, default="18,10,18"
     )
+    parser.add_argument(
+        "--save_permutation_importance", default=False, action="store_true",
+        help="If this flag is set, permutation importances are saved to a file"
+    )
     parser = add_rf_args(parser)
 
 
@@ -431,6 +435,8 @@ def main(args):
             scoring="f1_weighted",
         )
         dfmelt_perm = array_to_longform(result.importances.T, feature_names)
+        dfmelt_perm["fold"] = i
+        dfmelt_perm = dfmelt_perm.rename(columns={"index": "repetition"})
         dfs.append(dfmelt_perm)
 
     dfmelt_perm = pd.concat(dfs)
@@ -476,10 +482,13 @@ def main(args):
     plt.figure(figsize=(5, len(feature_names) // 3))
     sns_plot = sns.boxplot(data=dfmelt_perm, x="value", y="variable")
     plt.title(f"Name: {args.out_prefix}\nDataset: {args.input} \nTimestamp: {uid}")
-    outname = out_folder / f"{out_stem}_permutation_importance.png"
+    outname = out_folder / f"{out_stem}_permutation_importance"
     plt.tight_layout()
-    sns_plot.get_figure().savefig(outname)
-    logging.info(green + f"Saved permutation importance to {outname}" + RESET)
+    sns_plot.get_figure().savefig(f"{outname}.png")
+    logging.info(green + f"Saved permutation importance to {outname}.png" + RESET)
+    if args.save_permutation_importance:
+        dfmelt_perm.to_csv(f"{outname}.csv", index=False)
+        logging.info(green + f"Saved permutation importance to {outname}.csv" + RESET)
 
     # Fit the final model
     model.fit(X, y)

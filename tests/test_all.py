@@ -34,6 +34,19 @@ def test_analysis():
     args = parser.parse_args(test_args)
     analysis.main(args)
 
+def test_analysis_save_permutation_importance():
+    test_args = ["analysis",
+                 "--input", "tests/data/analysis/s2_2018_lataseno__points_clc__corine.csv",
+                 "--out_prefix", "demo_rf",
+                 "--save_permutation_importance",
+                 "--out_folder", "test_project/analysis",
+                 "--separator", ",",
+                 "--decimal", ".",
+                 "--remove_classes_smaller_than", "6"]
+    parser = get_parser()
+    args = parser.parse_args(test_args)
+    analysis.main(args)
+
 def test_tpot_train():
     test_args = ["tpot_train",
                  "--input", "tests/data/analysis/s2_2018_lataseno__points_clc__corine.csv",
