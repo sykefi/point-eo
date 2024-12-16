@@ -444,6 +444,7 @@ def main(args):
     y_true = y_true.astype(int)
     y_pred = y_pred.astype(int)
     classes = model.classes_
+    pred_df = pd.DataFrame({"y_true": y_true, "y_pred": y_pred})
 
     logging.info(bold + green + f"\nOverall results:")
     logging.info(
@@ -470,13 +471,17 @@ def main(args):
     plt.title(f"Name: {args.out_prefix}\nDataset: {args.input} \nTimestamp: {uid}")
     outname = out_folder / f"{out_stem}_metrics.png"
     plt.savefig(outname)
-    logging.info(green + f"Saved classification graph to {outname}" + RESET + "\n")
+    logging.info(green + f"Saved classification figure to {outname}" + RESET + "\n")
 
     confusion_matrixX(y_true, y_pred, classes, fonts=cm_fonts)
     plt.title(f"Name: {args.out_prefix}\nDataset: {args.input} \nTimestamp: {uid}")
     outname = out_folder / f"{out_stem}_confusion.png"
     plt.savefig(outname)
     logging.info(green + f"Saved confusion matrix to {outname}" + RESET + "\n")
+
+    outname = out_folder / f"{out_stem}_predictions.csv"
+    pred_df.to_csv(outname, index=False)
+    logging.info(green + f"Saved predictions to {outname}" + RESET + "\n")
 
     # Permutation importance
     plt.figure(figsize=(5, len(feature_names) // 3))
