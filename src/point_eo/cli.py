@@ -6,7 +6,7 @@ warnings.filterwarnings(
 )
 
 import argparse
-from point_eo.scripts import sample_raster, analysis, tpot_train, predict, set_band_description, postprocess_prediction
+from point_eo.scripts import sample_raster, analysis, feature_selection, tpot_train, predict, set_band_description, postprocess_prediction
 
 
 def main():
@@ -15,6 +15,7 @@ def main():
 
     sample_raster.add_args(subparsers)
     analysis.add_args(subparsers)
+    feature_selection.add_args(subparsers)
     tpot_train.add_args(subparsers)
     predict.add_args(subparsers)
     set_band_description.add_args(subparsers)
@@ -26,6 +27,8 @@ def main():
         sample_raster.main(args)
     elif args.script == "analysis":
         analysis.main(args)
+    elif args.script == "feature_selection":
+        feature_selection.main(args)
     elif args.script == "tpot_train":
         tpot_train.main(args)
     elif args.script == "predict":

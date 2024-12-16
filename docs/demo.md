@@ -92,6 +92,30 @@ With our test dataset the graphs look like this:
 
 See `point-eo analysis --help` for all parameters.
 
+## 02.1 Feature selection (optional)
+
+The analysis script performs simple feature importance evaluation with using permutation importance.
+Additional feature importance functionality is included in the `feature_selection` script, which currently has two approaches:
+
+1. Sequential Feature Selection, which uses the `sklearn` `SequentialFeatureSelector` class, performing both forward and backward selection
+
+2. Logistic regression coefficient evaluation, which fits a one-versus-rest logistic regression model for all classes, and presents the coefficients over all features. The data is normalized before fitting the model, and the results should give an idea about correlation between feature values and class predictions.
+However, the usual caveats of interpreting linear model coefficients apply.
+
+```cmd
+point-eo feature_selection `
+    --input test_project\\samples\\s2_2018_lataseno__points_clc__corine.csv `
+    --out_prefix demo_ `
+    --out_folder test_project\\feature_selection `
+    --separator ',' `
+    --decimal '.' `
+    --remove_classes_smaller_than 6 `
+    --sequential_feature_selector `
+    --n_features 5 `
+    --direction 'forward' `
+    --logistic_regression_coefficients
+```
+
 # 02. AutoML
 
 A more thorough approach for finding a model can be done with the TPOT AutoML library, which finds and tunes a model configuration with generic algorithms

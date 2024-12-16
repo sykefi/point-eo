@@ -1,11 +1,12 @@
 import pytest
 import argparse
-from point_eo.scripts import sample_raster, analysis, tpot_train, predict, set_band_description, postprocess_prediction
+from point_eo.scripts import sample_raster, feature_selection, analysis, tpot_train, predict, set_band_description, postprocess_prediction
 
 def get_parser():
     parser = argparse.ArgumentParser(prog="point-eo")
     subparsers = parser.add_subparsers(title="Available commands", dest="script")
     sample_raster.add_args(subparsers)
+    feature_selection.add_args(subparsers)
     analysis.add_args(subparsers)
     tpot_train.add_args(subparsers)
     predict.add_args(subparsers)
@@ -47,6 +48,22 @@ def test_analysis_save_permutation_importance():
     parser = get_parser()
     args = parser.parse_args(test_args)
     analysis.main(args)
+
+def test_feature_selection():
+    test_args = ["feature_selection",
+                 "--input", "tests/data/analysis/s2_2018_lataseno__points_clc__corine.csv",
+                 "--out_prefix", "demo_rf",
+                 "--out_folder", "test_project/feature_selection",
+                 "--separator", ",",
+                 "--decimal", ".",
+                 "--remove_classes_smaller_than", "6",
+                "--sequential_feature_selector",
+                "--n_features", "5",
+                "--direction", "forward",
+                "--logistic_regression_coefficients"]
+    parser = get_parser()
+    args = parser.parse_args(test_args)
+    feature_selection.main(args)
 
 def test_tpot_train():
     test_args = ["tpot_train",
