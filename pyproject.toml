@@ -1,0 +1,21 @@
+[project]
+name = "point-eo"
+version = "0.1.dev2"
+description = "Python library and module for training machine learning models on point-based EO data and large rasters. "
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+point-eo = "point_eo.cli:main"
+point_eo = "point_eo.cli:main"
+
+[project.optional-dependencies]
+test = [
+    "pytest"
+]

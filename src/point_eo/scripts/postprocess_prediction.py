@@ -7,8 +7,7 @@ import rioxarray
 
 
 def save_raster(x, name, crs):
-    if not np.all(x == np.zeros_like(x)):
-        x.rio.to_raster(name, compress="LZW", crs=crs, tiled=True, windowed=True)
+    x.rio.to_raster(name, compress="LZW", crs=crs, tiled=True, windowed=True)
 
 
 def add_args(subparser):

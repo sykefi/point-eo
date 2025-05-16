@@ -106,23 +106,25 @@ def calculate(
     Fx,
     cell_list,
     start_index=0,
+    global_index = 0,
     clip_buffer=0,
     bit_depth=8,
     crs="EPSG:3067",
     out_folder="predict_output",
     verbose=2,
+    pbar = None
 ):
     si = start_index
+    i = global_index
     out_folder = Path(out_folder)
     out_folder.mkdir(parents=True, exist_ok=True)
 
-    if verbose == 2 or verbose == 1:
-        ll = tqdm(cell_list)
-    else:
-        ll = cell_list
-    for i, c in enumerate(ll):
-        if i < si:  # start index
-            pass
+
+    for c in cell_list:
+        if i < si:
+            i += 1
+            if pbar:
+                pbar.update(1)
         else:
             try:
                 Ax = Fx.rio.clip([c], from_disk=True)
@@ -134,8 +136,8 @@ def calculate(
                     except FileNotFoundError: 
                         raise Exception("Running out of file handles. You can try continuing the run " \
                             f"by restarting the script with the parameter --start_index {i-1}." \
-                             "However, it is recommended to make --cell_size larger, deleting the patch folder " 
-                             "and restarting the script."
+                                "However, it is recommended to make --cell_size larger, deleting the patch folder " 
+                                "and restarting the script."
                         )
 
                     out_C = (out_C * (2**bit_depth - 1)).astype("uint16")
@@ -154,6 +156,10 @@ def calculate(
             except ValueError:
                 if verbose == 2:
                     print(f"ValueError in {i}")
+            if pbar:
+                pbar.update(1)
+            i += 1
+    return i
 
 
 def merge_folder(folder, output, crs="EPSG:3067"):
@@ -251,7 +257,11 @@ def main(args):
     input_file = Path(args.input_raster)
     model_file = Path(args.model)
     out_folder = Path(args.out_folder) / f"{input_file.stem}_patches"
-    out_folder.mkdir(exist_ok=True, parents=True)
+    try:
+        out_folder.mkdir(exist_ok=False, parents=True)
+    except FileExistsError:
+        print(f"Output folder '{out_folder}' already exists. Change the folder name to prevent overwrigin. Exiting.")
+        exit(1)
     out_final = Path(args.out_folder)
 
     # Model
@@ -270,13 +280,19 @@ def main(args):
         parallel=True,
     )
 
+    # if args.extent:
+    #     # Clip the raster to the maximum bounds of the extent file
+    #     extent = gpd.read_file(args.extent)
+    #     bounds_geometry = shapely.geometry.box(*extent.total_bounds)
+    #     Fx = Fx.rio.clip([bounds_geometry], from_disk=True)
+
     grid_cells = create_cell_grid(Fx, args.cell_size)
     cell = gpd.GeoDataFrame(grid_cells, columns=["geometry"], crs=args.crs)
     cell = cell.buffer(args.cell_buffer, cap_style=3, join_style=2)
     cell.to_file(out_final / "cell_grid.geojson")
 
     # Print cell size
-    Ax_first = Fx.rio.clip([cell[len(cell)//2]], from_disk=True)
+    Ax_first = Fx.rio.clip([cell[len(cell)//2]], from_disk=True) # Take a cell from the middle of array
     print(f"Cell size in pixels is: {Ax_first.shape}" \
           f"\nCell size in MB is: {Ax_first.nbytes / (1024*1024):.4f}" \
            "\nAdjust cell_size if a larger array fits to memory")
@@ -291,6 +307,8 @@ def main(args):
     if args.extent:
         extent = gpd.read_file(args.extent)
         calc_cells = cell.geometry.apply(lambda x: extent.intersects(x).any()).values
+        if calc_cells.sum() == 0:
+            raise Exception("Zero cells to be calculated! Check the extent and its CRS.")
     elif args.calculate_empty:
         # otherwise find empty cells in parallel if calculate_empty is assigned
         try:
@@ -309,17 +327,29 @@ def main(args):
         calc_cells = np.full(len(grid_cells), True)
 
     # Actual calculation and saving of cells
-    calculate(
-        model=model,
-        Fx=Fx,
-        cell_list=cell.iloc[calc_cells],
-        start_index=si,
-        clip_buffer=args.cell_buffer,
-        bit_depth=args.bit_depth,
-        crs=args.crs,
-        out_folder=out_folder,
-        verbose=args.verbose
-    )
+    # Cell list is split into lists of 1000 to solve memory issues and file handles running out
+    full_cell_list = cell.iloc[calc_cells]
+
+    if (args.verbose == 1) or (args.verbose == 2):
+        pbar = tqdm(total=len(full_cell_list))
+    else:
+        pbar = None
+
+    global_index = 0
+    for cell_list in np.array_split(full_cell_list, 1000):
+        global_index = calculate(
+            model=model,
+            Fx=Fx,
+            cell_list=cell_list,
+            start_index=si,
+            global_index=global_index,
+            clip_buffer=args.cell_buffer,
+            bit_depth=args.bit_depth,
+            crs=args.crs,
+            out_folder=out_folder,
+            verbose=args.verbose,
+            pbar=pbar
+        )
 
     # Merge to a vrt file
     merge_folder(

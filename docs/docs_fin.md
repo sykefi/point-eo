@@ -1,7 +1,4 @@
-
-Rasterien tulkinta pisteaineiston avulla
-
-v1
+Rasterien tulkinta pisteaineiston avulla point-eo -kirjastolla
 
 # Yleisiä ohjeita
 Avaa VS Code:
@@ -40,22 +37,16 @@ $ conda env remove -n ENV_NAME
 
 ## 01. Random Forest mallin evaluointi datasetillä ja opetuspisteillä
 
-Lähtödata:
-E:\Inputs\features\s2_july2021_pca1235_mxndvi_ndw1pc1_lashbl_ampl_osite12345_8b_10m2.img
-
-Reference:
-E:\Inputs\reference\koealat_20_22_220222_b10m_9feas_cl.shp
-
 Koealojen sarakkeet saa esim komennolla:
 ogrinfo E:\Inputs\reference\koealat_20_22_220222_b10m_9feas_cl.shp -ro -al -nomd
 
 1. Poimitaan lähtödatasta koealapisteiden perusteella taulukko:
 
 point-eo sample_raster ^
-    --input points.shp ^
-    --input_raster s2_2018_lataseno.tif ^
-    --target id ^
-    --out_folder sampling
+    --input data\\pointEO_testdata\\points_clc.geojson ^
+    --input_raster data\\pointEO_testdata\\s2_2018_lataseno.tif ^
+    --target corine ^
+    --out_folder testi\\demo\\suot
 
 1b. Jos halutaan lisätä kanavien nimet, se tehdään listaamalla ne erillisessä tiedostossa joka annetaan parametrina
     --band_names bandnames.txt ^
@@ -66,14 +57,14 @@ Parametri `--rename_target NIMI` vaihtaa target-muuttujan sarakkeen tarvittaessa
 Geometriat tallentuvat oletuksena geojson-modossa. Parametrilla `--shp` ulostulo tallentuu shapefilena.
 
 Nyt taulukko on tiedostossa
-sampling\\s2_2018_lataseno__points__id.tif
+sampling\\s2_2018_lataseno__points_clc__corine.tif
 
 2. Ajetaan random-forest koulutus ja analyysi tälle taulukolle
 
 point-eo analysis ^
-    --input sampling\\s2_2018_lataseno__points__id.csv ^
+    --input sampling\\s2_2018_lataseno__points_clc__corine.csv ^
     --out_prefix demo_rf ^
-    --out_folder out_test ^
+    --out_folder models\\demo_rf ^
     --separator , ^
     --decimal . ^
     --remove_classes_smaller_than 6
@@ -91,9 +82,9 @@ Tulostettavien kuvaajien fonttikokoja voi muuttaa parametereilla
 Automaattisen mallin etsinnän TPOT-kirjaston geneettisellä algoritmilla voi ajaa komennolla:
 
 point-eo tpot_train ^
-    --input sampling\\s2_2018_lataseno__clc_2018_lataseno__points__id__band0.csv ^
+    --input sampling\\s2_2018_lataseno__points_clc__corine.csv ^
     --out_prefix tpot_demo ^
-    --out_folder tpot_out_test ^
+    --out_folder models\\tpot_demo ^
     --generations 2 ^
     --population_size 10 ^
     --scoring f1_weighted
@@ -117,44 +108,52 @@ Kun halutaan tarkempia tuloksia TPOTin tuottamasta mallista, voidaan ajaa sama r
 antamalla yhdeksi parametriksi edellisen TPOT-skriptin tuottama mallitiedosto
 
 point-eo analysis ^
-    --input sampling\\s2_2018_lataseno__clc_2018_lataseno__points__id__band0.csv ^
+    --input sampling\\s2_2018_lataseno__points_clc__corine.csv ^
     --out_prefix tpot_demo ^
     --out_folder tpot_analysis ^
-    --tpot_model tpot_demo_acc0.6362_230605T201346.py  ^
+    --tpot_model models\\tpot_demo\\tpot_demo_acc0.6362_230606T133630.py  ^
     --separator , ^
     --decimal . ^
     --remove_classes_smaller_than 6
 
 # 03. tulkinta
 
-Tulkinta suoritetaan `predict`-komennolla
+Tulkinta suoritetaan `predict`-komennolla ja siihen tarvitaan malli, joka on tallennettu `analysis`-skriptillä .pkl-muodossa
 
 point-eo predict ^
-    --model output\\analysis\\demo_rf__s2_2018_lataseno__clc_2018_lataseno__points__id__band0__2023-06-06T10-08-18_model.pkl ^
-    --input_raster D:\\data\\pointEO_testdata\\pointEO_testdata\\s2_2018_lataseno.tif ^
+    --model models\\demo_rf\\demo_rf__s2_2018_lataseno__points_clc__corine__2023-06-06T15-16-10_model.pkl ^
+    --input_raster data\\pointEO_testdata\\s2_2018_lataseno.tif ^
     --cell_size 1000 ^
-    --block_buffer 50 ^
-    --out_folder output\\predictions
+    --cell_buffer 1 ^
+    --extent data\\pointEO_testdata\\testarea_lataseno\\testarea_lataseno.shp ^
+    --out_folder predictions\\demo_tulkinta
+
+
+--cell_size -parametri kertoo kuinka suuria alueita käsitellään kerrallaan muistissa (cell_size X cell_size pikseliä). 
+Jos muisti ei riitä, pienennä tätä arvoa. Kannattaa käytää suurinta mahdollista arvoa joka muistiin mahtuu. 
+--cell_buffer -parametri määrittää kuinka paljon kutakin ruutua bufferoidaan. Varmuuden vuoksi 1, mutta pitäisi toimia myös 0:lla [mikkoi 14.9.23: Oli ennen nimellä 'block_buffer']
 
 
 Virtuaalirasteri voidaan muuttaa normaaliksi rasteriksi GDALin avulla:
-python C:\\Users\\E1007914\\AppData\\Local\\miniconda3\\envs\\point-eo\\Scripts\\gdal_merge.py ^
--o output\\predictions\\demo.tif ^
+Etsi gdal_merge.py: where gdal_merge.py
+
+python E:\\anaconda\\anaconda3\\envs\\point-eo\\Scripts\\gdal_merge.py ^
+-o predictions\\demo_tulkinta\\demo_C.tif ^
 -co "COMPRESS=LZW" ^
 -co "BIGTIFF=YES" ^
 -co "TILED=YES" ^
 -ot "UInt16" ^
-output\\predictions\\s2_2018_lataseno__demo_rf__s2_2018_lataseno__clc_2018_lataseno__points__id__band0__2023-06-06T10-08-18_model_C.vrt
+predictions\\demo_tulkinta\\s2_2018_lataseno__demo_rf__s2_2018_lataseno__points_clc__corine__2023-06-06T15-16-10_model_C.vrt
 
 
 Rasterin kanavat voidaan nimetä uudelleen tiedostosta, joka on luotu `analysis`-skriptillä
 point-eo set_band_description ^
-    --input_raster output\\predictions\\demo.tif ^
-    --label_map out\\analysis\\demo_rf__s2_2018_lataseno__clc_2018_lataseno__points__id__band0__2023-06-06T10-48-19_classes.txt
+    --input_raster predictions\\demo_tulkinta\\demo_C.tif ^
+    --label_map models\\demo_rf\\demo_rf__s2_2018_lataseno__points_clc__corine__2023-06-06T13-34-57_label_map.txt
 
 
 Lopuksi voidaan luoda rasteri jossa vain todennäköisin luokka, sekä maksimitodennäköisyyden arvo
 point-eo postprocess_prediction ^
-    --input_raster output\\predictions\\demo.tif ^
-    --out_folder output\\predictions ^
-    --label_map out\\analysis\\demo_rf__s2_2018_lataseno__clc_2018_lataseno__points__id__band0__2023-06-06T10-48-19_classes.txt
+    --input_raster predictions\\demo_tulkinta\\demo_C.tif ^
+    --out_folder predictions\\demo_tulkinta ^
+    --label_map models\\demo_rf\\demo_rf__s2_2018_lataseno__points_clc__corine__2023-06-06T13-34-57_label_map.txt
