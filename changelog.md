@@ -1,3 +1,13 @@
+## 0.1.0:
+
+- Tests
+- Moved the project to use pyproject.toml in place of setup.py
+- `analysis` has the option for saving the dataframe that produces the permutation importance figure
+- `analysis` now saves the predictions into a csv file. This and the update above make it easier to create publication-ready figures.
+- NEW `feature_selection` script. Feature importance evaluation with `sklearn` `SequentialFeatureSelector` and linear regression coefficients is implemented.
+
+- more straightforward installation instructions.
+
 ## 0.1.dev
 
 - Fixed a unnecessary null raster check in `postprocess_prediction.py`
@@ -14,11 +24,3 @@
 - Searching for empty cells to speed up calculations used Dask previously. This caused some memory errors in combination with `rasterio.clip`. Parallelization was changed to use `joblib` instead.
 
 - Added printing of array sizes to make it easier to choose `--cell_size`
-
-## 0.1.0:
-
-- Tests
-- Moved the project to use pyproject.toml in place of setup.py
-- `analysis` has the option for saving the dataframe that produces the permutation importance figure
-- `analysis` now saves the predictions into a csv file. This and the update above make it easier to create publication-ready figures.
-- NEW `feature_selection` script. Feature importance evaluation with `sklearn` `SequentialFeatureSelector` and linear regression coefficients is implemented.

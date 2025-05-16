@@ -18,24 +18,14 @@ See the [demo notebook](docs/demo_notebook.ipynb) for a demo of the Python API.
 
 ## Installation
 
-```cmd
-git clone https://github.com/mikkoim/point-eo.git
-cd point-eo
-```
+You have to have [miniforge](https://conda-forge.org/download/) installed. `point-eo` will depends on `gdal` and must be installed in a conda environment.
 
-Install [miniconda](https://docs.conda.io/en/latest/miniconda.html) and [Mamba](https://mamba.readthedocs.io/en/latest/installation.html) first. Then create the environment:
 ```cmd
-mamba env create -f environment.yaml
-```
+conda create -n pointeo python=3.10 -y
+conda activate pointeo
+conda install gdal xgboost geopandas rasterio rioxarray -c conda-forge -y
 
-Activate the environment
-```
-conda activate point-eo
-```
-
-and install the package
-```cmd
-pip install -e .
+pip install git+https://github.com/sykefi/point-eo
 ```
 
 Now `point-eo` should be available on the command line. Running
